@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"maps"
-	"math/rand"
 	_ "net/http/pprof"
 	"slices"
 	"sync"
-	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -23,69 +21,8 @@ var (
 func main() {
 	n := maelstrom.NewNode()
 
-	// n.Handle("init", func(msg maelstrom.Message) error {
-	// 	// n<number> -> base port 6060 + number, e.g. n3 -> 6063
-	// 	num, err := strconv.Atoi(n.ID()[1:])
-	// 	if err != nil {
-	// 		return fmt.Errorf("parse node id %q: %w", n.ID(), err)
-	// 	}
-	// 	go func() { log.Fatal(http.ListenAndServe(fmt.Sprintf("localhost:%d", 6060+num), nil)) }()
-	// 	return nil
-	// })
+	// TODO add anti-entropy loop to handle partition
 
-	// 500ms interval
-	// :msg-count 71598, (1s interval)
-	//                  :msgs-per-op 33.773567},
-	//             :stable-latencies {0 0,
-	// 0.5 386,
-	// 0.95 738,
-	// 0.99 948,
-	// 1 1236},
-	// 967 values
-	// N=25
-	// 25 nodes * 3 message/s * 20s = 1500 messages
-	go func() {
-		d := time.NewTicker(50 * time.Millisecond)
-		for range d.C {
-			var body map[string]any
-			mu.RLock()
-			body = map[string]any{
-				"type":     "timed_broadcast",
-				"messages": slices.Collect(maps.Keys(messages)),
-			}
-			mu.RUnlock()
-
-			for i := 0; i < 3; {
-				randomNode := n.NodeIDs()[rand.Intn(len(n.NodeIDs()))]
-				if randomNode == n.ID() {
-					continue
-				}
-				go n.Send(randomNode, body)
-				i++
-			}
-		}
-	}()
-
-	n.Handle("timed_broadcast", func(msg maelstrom.Message) error {
-		var body struct {
-			Message []int `json:"messages"`
-		}
-		err := json.Unmarshal(msg.Body, &body)
-		if err != nil {
-			return err
-		}
-
-		mu.Lock()
-		for _, v := range body.Message {
-			messages[v] = struct{}{}
-		}
-		mu.Unlock()
-
-		return nil
-	})
-
-	// 2. gossip
-	// pick uniformily random node of nodeIDs and broadcast to them
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		// This message requests that a value be broadcast out to all nodes in the cluster.
 		// The value is always an integer and it is unique for each message from Maelstrom.
@@ -97,35 +34,41 @@ func main() {
 			return err
 		}
 
-		// mu.RLock()
-		// _, ok := messages[body.Message]
-		// mu.RUnlock()
-		// if !ok {
+		// if sender is a client this node is the root of the spanning tree
+		var root string
+		if msg.Src[0] == 'c' {
+			root = n.ID()
+		} else {
+			// TODO we must set the original sender to get the original root and thus its spanning
+			// tree
+			root = msg.Src
+		}
+
 		mu.Lock()
 		messages[body.Message] = struct{}{}
+		tree := spanningTree(topology, root)
 		mu.Unlock()
-		// 	// pick random node
-		// 	for i := 0; i < 6; {
-		// 		randomNode := n.NodeIDs()[rand.Intn(len(n.NodeIDs()))]
-		// 		if randomNode == n.ID() || randomNode == msg.Src {
-		// 			continue
-		// 		}
-		// 		go n.Send(randomNode, map[string]any{
-		// 			"type":    "broadcast",
-		// 			"message": body.Message,
-		// 		})
-		// 		i++
-		// 	}
-		// }
 
-		// if msg.Src[0] == 'c' { // only reply to clients
-		reply := map[string]any{
-			"type": "broadcast_ok",
+		// forward message using fire-and-forget to not incur cost of ack messages by each node.
+		// anti-entropy loop takes care of lost messages/partitions
+		nodes := tree[n.ID()]
+		for _, node := range nodes {
+			go func() {
+				_ = n.Send(node, map[string]any{
+					"type":    "broadcast",
+					"message": body.Message,
+				})
+			}()
 		}
-		return n.Reply(msg, reply)
-		// }
 
-		// return nil
+		if msg.Src[0] == 'c' { // only reply to clients
+			reply := map[string]any{
+				"type": "broadcast_ok",
+			}
+			return n.Reply(msg, reply)
+		}
+
+		return nil
 	})
 
 	n.Handle("read", func(msg maelstrom.Message) error {
@@ -147,7 +90,9 @@ func main() {
 			return err
 		}
 
+		mu.Lock()
 		topology = body.Topology
+		mu.Unlock()
 
 		reply := map[string]any{
 			"type": "topology_ok",
@@ -158,4 +103,24 @@ func main() {
 	if err := n.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func spanningTree(graph map[string][]string, root string) map[string][]string {
+	result := make(map[string][]string)
+	visited := make(map[string]struct{})
+	queue := []string{root}
+	for len(queue) > 0 {
+		n := queue[0]
+		queue = queue[1:]
+		visited[n] = struct{}{}
+		for _, m := range graph[n] {
+			if _, ok := visited[m]; ok {
+				continue
+			}
+			visited[m] = struct{}{}
+			result[n] = append(result[n], m)
+			queue = append(queue, m)
+		}
+	}
+	return result
 }
