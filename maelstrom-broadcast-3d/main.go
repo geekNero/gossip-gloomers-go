@@ -15,38 +15,52 @@ var (
 	mu       sync.RWMutex
 	messages = map[int]struct{}{}
 	topology map[string][]string
+	trees    map[string]map[string][]string // spanning trees
 )
 
 // https://fly.io/dist-sys/3d/
+//
+// :stable-latencies {0 39,
+//
+//	0.5 459,
+//	0.95 689,
+//	0.99 775,
+//	1 799},
 func main() {
 	n := maelstrom.NewNode()
+	trees = make(map[string]map[string][]string)
 
 	// TODO add anti-entropy loop to handle partition
 
+	// TODO this now relies on topology being sent before first broadcast, can I rely on that?
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		// This message requests that a value be broadcast out to all nodes in the cluster.
 		// The value is always an integer and it is unique for each message from Maelstrom.
 		var body struct {
-			Message int `json:"message"`
+			Message int    `json:"message"`
+			Root    string `json:"root"`
 		}
 		err := json.Unmarshal(msg.Body, &body)
 		if err != nil {
 			return err
 		}
 
-		// if sender is a client this node is the root of the spanning tree
+		// if sender is a client this node is the root of the spanning tree otherwise the message is
+		// a forwarded one with the root node set
 		var root string
-		if msg.Src[0] == 'c' {
+		if body.Root == "" {
 			root = n.ID()
 		} else {
-			// TODO we must set the original sender to get the original root and thus its spanning
-			// tree
-			root = msg.Src
+			root = body.Root
 		}
 
 		mu.Lock()
 		messages[body.Message] = struct{}{}
-		tree := spanningTree(topology, root)
+		tree, ok := trees[root]
+		if !ok {
+			tree = spanningTree(topology, root)
+			trees[root] = spanningTree(topology, root)
+		}
 		mu.Unlock()
 
 		// forward message using fire-and-forget to not incur cost of ack messages by each node.
@@ -57,6 +71,7 @@ func main() {
 				_ = n.Send(node, map[string]any{
 					"type":    "broadcast",
 					"message": body.Message,
+					"root":    root,
 				})
 			}()
 		}
