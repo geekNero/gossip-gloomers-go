@@ -135,7 +135,7 @@ func TestSpanningTree(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := spanningTree(tt.graph, tt.root)
+			got := buildSpanningTree(tt.graph, tt.root)
 
 			for node, wantNeighbors := range tt.want {
 				gotNeighbors, ok := got[node]

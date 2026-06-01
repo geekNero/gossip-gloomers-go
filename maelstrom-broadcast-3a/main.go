@@ -7,11 +7,9 @@ import (
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
-var (
-	messages []int
-	topology map[string][]string
-)
+var messages []int
 
+// Challenge #3a: Single-Node Broadcast
 // https://fly.io/dist-sys/3a/
 func main() {
 	n := maelstrom.NewNode()
@@ -26,10 +24,9 @@ func main() {
 		}
 
 		messages = append(messages, body.Message)
-		reply := map[string]any{
+		return n.Reply(msg, map[string]any{
 			"type": "broadcast_ok",
-		}
-		return n.Reply(msg, reply)
+		})
 	})
 
 	n.Handle("read", func(msg maelstrom.Message) error {
@@ -41,16 +38,6 @@ func main() {
 	})
 
 	n.Handle("topology", func(msg maelstrom.Message) error {
-		var body struct {
-			Topology map[string][]string `json:"topology"`
-		}
-		err := json.Unmarshal(msg.Body, &body)
-		if err != nil {
-			return err
-		}
-
-		topology = body.Topology
-
 		reply := map[string]any{
 			"type": "topology_ok",
 		}

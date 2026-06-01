@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,12 +20,19 @@ var (
 )
 
 // https://fly.io/dist-sys/3d/
+// We will increase our node count to 25 and add a delay of 100ms to each message to simulate a slow network.
+// Your challenge is to achieve the following:
+// Messages-per-operation is below 30
+// Median latency is below 400ms
+// Maximum latency is below 600ms
+//
 // This implementation uses the suggested grid topology. A spanning tree is built from it so the
-// number of messages needed for the broadcast is minimal.
+// number of messages needed for the broadcast is minimal. Since we use the 2d grid we do not
+// achieve the above performance requirements. ../maelstrom-broadcast-3d-tree/ builds a spanning
+// tree based on the overall list of nodes to achieve the performance requirements.
 
 func main() {
 	n := maelstrom.NewNode()
-	messages = make([]int, 100)
 	trees = make(map[string]map[string][]string)
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
@@ -51,14 +57,13 @@ func main() {
 		}
 
 		// forward message using fire-and-forget to not incur cost of ack messages by each node.
-		// anti-entropy loop takes care of lost messages/partitions
 		tree, ok := trees[root]
 		if !ok {
 			panic("got broadcast from node " + root + " for which we do not have a tree")
 		}
 
-		nodes := tree[n.ID()]
-		for _, node := range nodes {
+		children := tree[n.ID()]
+		for _, node := range children {
 			go func() {
 				_ = n.Send(node, map[string]any{
 					"type":    "broadcast",
@@ -68,16 +73,14 @@ func main() {
 			}()
 		}
 
-		// storing it before sending ok
 		mu.Lock()
 		messages = append(messages, body.Message)
 		mu.Unlock()
 
 		if msg.Src[0] == 'c' { // only reply to clients as forwarding is fire-and-forget
-			reply := map[string]any{
+			return n.Reply(msg, map[string]any{
 				"type": "broadcast_ok",
-			}
-			return n.Reply(msg, reply)
+			})
 		}
 
 		return nil
@@ -106,7 +109,7 @@ func main() {
 		}
 		mu.Lock()
 		for node := range body.Topology {
-			trees[node] = spanningTree(body.Topology, node)
+			trees[node] = buildSpanningTree(body.Topology, node)
 		}
 		mu.Unlock()
 
@@ -124,15 +127,18 @@ func main() {
 	}
 }
 
-// TODO make clear what the limitations are and capture a results.edn
-// :stable-latencies {0 13,
+// buildSpanningTree builds a spanning tree from the suggested 2d grid topology. The spanning tree
+// eliminates duplicate messages as there are no duplicate routes.
+// This does not hit the performance requirements as already suggested in
+// https://fly.io/dist-sys/3d/:
+// "The neighbors Maelstrom suggests are, by default, arranged in a two-dimensional grid. This
+// means that messages are often duplicated en route to other nodes, and latencies are on the
+// order of 2 * sqrt(n) network delays."
 //
-//	0.5 472,
-//	0.95 686,
-//	0.99 770,
-//	1 799},
-
-func spanningTree(graph map[string][]string, root string) map[string][]string {
+// Sending a message from one corner to the opposite one takes 2(m-1) hops in an mxm grid. With
+// mxm=N -> m=sqrt(N) the diameter is 2(sqrt(N)-1). This can be seen in ./results/results.edn
+// :stable-latencies with max being ~800ms in the 5x5 node grid with 100ms latency between nodes.
+func buildSpanningTree(graph map[string][]string, root string) map[string][]string {
 	result := make(map[string][]string)
 	visited := make(map[string]struct{})
 	queue := []string{root}

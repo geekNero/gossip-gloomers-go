@@ -26,6 +26,9 @@ go.work.sum
 # maelstrom generated
 store/
 
+# built binaries
+maelstrom-broadcast
+
 # debugging/testing
 _research/
 *.log
