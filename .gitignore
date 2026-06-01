@@ -31,3 +31,6 @@ _research/
 *.log
 scratch*.dot
 .claude/
+maelstrom-broadcast-3d/trees/
+
+*.pprof
