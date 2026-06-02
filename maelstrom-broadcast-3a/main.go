@@ -38,10 +38,9 @@ func main() {
 	})
 
 	n.Handle("topology", func(msg maelstrom.Message) error {
-		reply := map[string]any{
+		return n.Reply(msg, map[string]any{
 			"type": "topology_ok",
-		}
-		return n.Reply(msg, reply)
+		})
 	})
 
 	if err := n.Run(); err != nil {
