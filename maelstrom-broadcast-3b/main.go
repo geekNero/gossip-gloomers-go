@@ -16,8 +16,6 @@ var (
 	messages = map[int]struct{}{}
 )
 
-// TODO why does the test not pass? some messages are lost
-
 // Challenge #3b: Multi-Node Broadcast
 // https://fly.io/dist-sys/3b/
 func main() {
@@ -41,7 +39,7 @@ func main() {
 		}
 		mu.Unlock()
 		if !ok {
-			// gossip: forward to 3 random peers (assumes --node-count 5)
+			// gossip: forward new messages to 3 random peers (assumes --node-count 5)
 			for i := 0; i < 3; {
 				randomNode := n.NodeIDs()[rand.Intn(len(n.NodeIDs()))]
 				if randomNode == n.ID() || randomNode == msg.Src {
