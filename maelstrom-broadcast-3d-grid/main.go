@@ -19,17 +19,20 @@ var (
 	trees    map[string]map[string][]string // spanning trees using 2d grid
 )
 
+// Challenge #3d: Efficient Broadcast, Part I
 // https://fly.io/dist-sys/3d/
+//
 // We will increase our node count to 25 and add a delay of 100ms to each message to simulate a slow network.
 // Your challenge is to achieve the following:
 // Messages-per-operation is below 30
 // Median latency is below 400ms
 // Maximum latency is below 600ms
 //
-// This implementation uses the suggested grid topology. A spanning tree is built from it so the
-// number of messages needed for the broadcast is minimal. Since we use the 2d grid we do not
-// achieve the above performance requirements. ../maelstrom-broadcast-3d-tree/ builds a spanning
-// tree based on the overall list of nodes to achieve the performance requirements.
+// This implementation uses the suggested grid topology to explore the 2*sqrt(N) latency of the
+// 2d grid. A spanning tree is built from it to eliminate duplicate messages, but the grid diameter
+// still dominates latency so the performance requirements are not met. It also has no anti-entropy
+// loop, so --nemesis partition will cause message loss. See ../maelstrom-broadcast-3d-tree/ for
+// the solution that meets the requirements.
 
 func main() {
 	n := maelstrom.NewNode()
@@ -161,7 +164,7 @@ func buildSpanningTree(graph map[string][]string, root string) map[string][]stri
 // writeDotFiles writes trees/<nodeID>/nN.dot for every root in allTrees.
 // Each file shows the full topology with the spanning-tree edges highlighted red.
 func writeDotFiles(nodeID string, topo map[string][]string, allTrees map[string]map[string][]string) {
-	dir := filepath.Join("/home/ivo/code/gossip-gloomers-go/maelstrom-broadcast-3d/trees", nodeID)
+	dir := filepath.Join(os.Getenv("HOME"), "code/gossip-gloomers-go/maelstrom-broadcast-3d-grid/trees", nodeID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Printf("writeDotFiles: mkdir %s: %v", dir, err)
 		return

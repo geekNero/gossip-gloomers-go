@@ -15,8 +15,14 @@ runs the Maelstrom test with the parameters from the challenge.
 | [#3a: Single-Node Broadcast](https://fly.io/dist-sys/3a/) | [maelstrom-broadcast-3a](maelstrom-broadcast-3a) |
 | [#3b: Multi-Node Broadcast](https://fly.io/dist-sys/3b/) | [maelstrom-broadcast-3b](maelstrom-broadcast-3b) |
 | [#3c: Fault Tolerant Broadcast](https://fly.io/dist-sys/3c/) | [maelstrom-broadcast-3c](maelstrom-broadcast-3c) |
-| [#3d: Efficient Broadcast, Part I](https://fly.io/dist-sys/3d/) (grid topology) | [maelstrom-broadcast-3d-grid](maelstrom-broadcast-3d-grid) |
-| [#3d: Efficient Broadcast, Part I](https://fly.io/dist-sys/3d/) (spanning tree) | [maelstrom-broadcast-3d-tree](maelstrom-broadcast-3d-tree) |
+| [#3d: Efficient Broadcast, Part I](https://fly.io/dist-sys/3d/) (grid — explores 2√N latency, does not meet requirements) | [maelstrom-broadcast-3d-grid](maelstrom-broadcast-3d-grid) |
+| [#3d: Efficient Broadcast, Part I](https://fly.io/dist-sys/3d/) (spanning tree — solution) | [maelstrom-broadcast-3d-tree](maelstrom-broadcast-3d-tree) |
+| [#3e: Efficient Broadcast, Part II](https://fly.io/dist-sys/3e/) | [maelstrom-broadcast-3d-tree](maelstrom-broadcast-3d-tree) |
+
+## Resources
+
+[Martin Kleppmann's distributed systems course](https://martin.kleppmann.com/2020/11/18/distributed-systems-and-elliptic-curves.html)
+has lectures on broadcast and gossip protocols that are useful companions to these challenges.
 
 ## Disclaimer
 

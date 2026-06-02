@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # https://fly.io/dist-sys/3d/
+# https://fly.io/dist-sys/3e/
 set -euo pipefail
 
 go build -o maelstrom-broadcast .
