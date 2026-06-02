@@ -28,6 +28,8 @@ store/
 
 # built binaries
 maelstrom-broadcast
+maelstrom-echo
+maelstrom-unique-ids
 
 # debugging/testing
 _research/
