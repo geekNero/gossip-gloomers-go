@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"maps"
-	"sync"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -24,9 +22,6 @@ func main() {
 	n := maelstrom.NewNode()
 	kv := maelstrom.NewSeqKV(n)
 
-	var counter map[string]int
-	var mu sync.RWMutex
-
 	n.Handle("add", func(msg maelstrom.Message) error {
 		var body struct {
 			Delta int `json:"delta"`
@@ -35,18 +30,25 @@ func main() {
 			return err
 		}
 
-		newCounter := make(map[string]int, len(n.NodeIDs()))
-		mu.RLock()
-		maps.Copy(newCounter, counter)
-		newCounter[n.ID()] += body.Delta
-		err := kv.CompareAndSwap(context.Background(), "counter", counter, newCounter, true)
-		if err != nil {
-			// TODO what now; retry I guess
-			if maelstrom.ErrorCode(err) == maelstrom.PreconditionFailed {
-				// retry
+		for {
+			// read latest value
+			i, err := kv.ReadInt(context.Background(), "counter")
+			if err != nil {
+				if maelstrom.ErrorCode(err) == maelstrom.KeyDoesNotExist {
+					i = 0
+				} else {
+					// TODO panic or what?
+				}
+			}
+			err = kv.CompareAndSwap(context.Background(), "counter", i, i+body.Delta, true)
+			if err != nil {
+				if maelstrom.ErrorCode(err) == maelstrom.PreconditionFailed {
+					// retry but if not precondition failed what to do?
+				}
+			} else {
+				break
 			}
 		}
-		mu.RUnlock()
 
 		return n.Reply(msg, map[string]any{
 			"type": "add_ok",
@@ -54,20 +56,19 @@ func main() {
 	})
 
 	n.Handle("read", func(msg maelstrom.Message) error {
-		result := make(map[string]int)
-		err := kv.ReadInto(context.Background(), "counter", &result)
+		// TODO I could make the counter an atomic and update it on read here? so the initial read
+		// on add can be moved after the cas and only done on error
+		i, err := kv.ReadInt(context.Background(), "counter")
 		if err != nil {
-			// TODO err or just return 0?
-		}
-
-		var sum int
-		for _, v := range result {
-			sum += v
+			if maelstrom.ErrorCode(err) == maelstrom.KeyDoesNotExist {
+				i = 0
+				// TODO err or just return 0?
+			}
 		}
 
 		return n.Reply(msg, map[string]any{
 			"type":  "read_ok",
-			"value": sum,
+			"value": i,
 		})
 	})
 
