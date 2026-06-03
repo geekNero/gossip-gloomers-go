@@ -1,2 +1,4 @@
+github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/jepsen-io/maelstrom/demo/go v0.0.0-20251128144731-cb7f07239012 h1:j2FpC/930Px9SWIn8lgzxEiEZOvaQ9EUs37+e1QCNLA=
 github.com/jepsen-io/maelstrom/demo/go v0.0.0-20251128144731-cb7f07239012/go.mod h1:i6aVIs5AIOOaQF1lAisBm7DDeWM1Iopf+26UxjagsCU=

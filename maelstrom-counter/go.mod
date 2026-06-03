@@ -3,3 +3,5 @@ module maelstrom-counter
 go 1.24.0
 
 require github.com/jepsen-io/maelstrom/demo/go v0.0.0-20251128144731-cb7f07239012
+
+require github.com/google/go-cmp v0.7.0 // indirect
