@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -13,6 +12,8 @@ import (
 
 // Challenge #4: Grow-Only Counter
 // https://fly.io/dist-sys/4/
+// Implements a state-based G-Counter CRDT per Shapiro et al., "A comprehensive study of
+// Convergent and Commutative Replicated Data Types" https://inria.hal.science/inria-00555588/document
 
 func main() {
 	n := maelstrom.NewNode()
@@ -39,10 +40,15 @@ func main() {
 		return nil
 	})
 
-	// gossip loop to observe fresh values as sequential kv does not guarantee freshness of values
-	// written by other nodes
+	// seq-kv may serve past states indefinitely to other nodes: a node is allowed to observe any
+	// prefix of the total order, so another node's writes may never become visible via kv reads.
+	// Two approaches to get a consistent counter value across nodes:
+	// 1. On read, RPC to each peer to fetch their local counter directly (not via seq-kv).
+	// 2. Periodically broadcast each node's local counter to all peers (this approach) so reads
+	//    stay local and the G-Counter merge (max) converges.
+	// With only 3 nodes, broadcasting to all peers is cheap; no need for random peer selection.
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
+		ticker := time.NewTicker(time.Second)
 		for range ticker.C {
 			mu.RLock()
 			body := map[string]any{
@@ -51,13 +57,10 @@ func main() {
 			}
 			mu.RUnlock()
 
-			for i := 0; i < 1; {
-				randomNode := n.NodeIDs()[rand.Intn(len(n.NodeIDs()))]
-				if randomNode == n.ID() {
-					continue
+			for _, peer := range n.NodeIDs() {
+				if peer != n.ID() {
+					_ = n.Send(peer, body)
 				}
-				_ = n.Send(randomNode, body)
-				i++
 			}
 		}
 	}()
