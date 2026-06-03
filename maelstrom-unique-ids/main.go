@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"log"
 	"strconv"
 	"sync"
@@ -10,28 +10,28 @@ import (
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
-// https://fly.io/dist-sys/2/ Challenge #2: Unique ID Generation
-// we receive
-// {
-//   "type": "generate"
-// }
-// we respond
-// {
-//   "type": "generate_ok",
-//   "id": 123
-// }
+// Challenge #2: Unique ID Generation
+// https://fly.io/dist-sys/2/
+//
+// The challenge requires total availability: nodes must generate unique IDs even during network
+// partitions, so nodes cannot coordinate. Any scheme where each component of
+// the ID is scoped to a single node works: node ID + local counter, UUIDs, or Snowflake IDs.
+// Snowflake was chosen for fun.
 //
 // Solved using: https://en.wikipedia.org/wiki/Snowflake_ID
-// 64-bit: 0 | 41-bit timestamp ms since some epoch | 10-bit worker ID | 12-bit sequence number
+// 64-bit: 0 | 41-bit timestamp ms since custom epoch | 10-bit node ID | 12-bit sequence number
 //
-// We chose our RC batch start date as our epoch: 18th May 2026
-// Timstamp of 2^41 ms: ~69 years
+// Uniqueness: timestamp+nodeID pair is unique per millisecond across nodes; sequence number
+// disambiguates up to 4096 IDs generated on the same node within the same millisecond.
 //
-// 12-bit sequence number is to avoid duplicate ids generated on the same node in the same millisecond. So a node can generate 4069 ids per millisecond
+// Custom epoch: RC batch start date 2026-05-18; gives ~69 years before overflow (2^41 ms).
 //
-// Challenge allows id to be of any type. We marshal IDs into string to avoid JS double precision issue "1234"
+// IDs are returned as strings to avoid JS double-precision loss.
+//
+// Not implemented but required in production:
+// - Clock going backwards (NTP slew, leap seconds): refuse to issue IDs until time catches up.
+// - Crash recovery: persist lastTimestamp so a restarted node cannot reuse a previous timestamp.
 
-// RC batch start date
 var epochBase = time.Date(2026, 0o5, 18, 0, 0, 0, 0, time.UTC)
 
 func main() {
@@ -50,30 +50,30 @@ func main() {
 		return nil
 	})
 
-	refTimestamp := now()
-	var counter uint16
+	lastTimestamp := now()
+	var seq uint16
 	var mu sync.Mutex
 	n.Handle("generate", func(msg maelstrom.Message) error {
 		timestamp := now()
-		var curCounter uint16
+		var curSeq uint16
 		mu.Lock()
-		if timestamp == refTimestamp {
-			counter++
-			// TODO prevent duplicate ids when all 12-bits are used up. Either return an error/wait a ms
-			if counter > 4095 {
-				panic("counter overflow")
+		if timestamp == lastTimestamp {
+			seq++
+			if seq > 4095 {
+				mu.Unlock()
+				return errors.New("counter overflow: too many requests in one millisecond")
 			}
 		} else {
-			refTimestamp = timestamp
-			counter = 0
+			lastTimestamp = timestamp
+			seq = 0
 		}
-		curCounter = counter
+		curSeq = seq
 		mu.Unlock()
 
-		id := format(timestamp, nodeID, curCounter)
+		id := format(timestamp, nodeID, curSeq)
 		body := map[string]any{
 			"type": "generate_ok",
-			"id":   fmt.Sprintf("%d", id),
+			"id":   strconv.FormatInt(id, 10),
 		}
 
 		return n.Reply(msg, body)
@@ -90,14 +90,11 @@ func now() int64 {
 
 // format returns a snowflake formatted ID.
 // 0|41-bit|10-bit|12-bit
-func format(timestamp, nodeID int64, counter uint16) int64 {
+func format(timestamp, nodeID int64, seq uint16) int64 {
 	nodeID &= 1023
 	nodeID = nodeID << 12
 
-	byteCounter := int64(counter)
-	byteCounter &= int64(4095)
-
 	timestamp &= (1 << 41) - 1
 	timestamp <<= 22
-	return timestamp | nodeID | byteCounter
+	return timestamp | nodeID | (int64(seq) & 4095)
 }

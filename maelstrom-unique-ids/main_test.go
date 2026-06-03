@@ -24,7 +24,6 @@ func Test_format(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := format(tt.timestamp, tt.nodeID, tt.counter)
-			// TODO: update the condition below to compare got with tt.want.
 			if tt.want != got {
 				t.Errorf("format() = %v, want %v", got, tt.want)
 			}
