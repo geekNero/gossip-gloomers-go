@@ -18,12 +18,16 @@ runs the Maelstrom test with the parameters from the challenge.
 | [#3d: Efficient Broadcast, Part I](https://fly.io/dist-sys/3d/) (grid — explores 2√N latency, does not meet requirements) | [maelstrom-broadcast-3d-grid](maelstrom-broadcast-3d-grid) |
 | [#3d: Efficient Broadcast, Part I](https://fly.io/dist-sys/3d/) (spanning tree — solution) | [maelstrom-broadcast-3d-tree](maelstrom-broadcast-3d-tree) |
 | [#3e: Efficient Broadcast, Part II](https://fly.io/dist-sys/3e/) | [maelstrom-broadcast-3d-tree](maelstrom-broadcast-3d-tree) |
-| [#4: Grow-Only Counter](https://fly.io/dist-sys/4/) (WIP) | [maelstrom-counter](maelstrom-counter) |
+| [#4: Grow-Only Counter](https://fly.io/dist-sys/4/) | [maelstrom-counter](maelstrom-counter) |
 
 ## Resources
 
 [Martin Kleppmann's distributed systems course](https://martin.kleppmann.com/2020/11/18/distributed-systems-and-elliptic-curves.html)
 has lectures on broadcast and gossip protocols that are useful companions to these challenges.
+
+Shapiro et al., [A comprehensive study of Convergent and Commutative Replicated Data
+Types](https://inria.hal.science/inria-00555588/document). The G-Counter in challenge #4 follows
+the state-based CRDT specification from this paper.
 
 ## Disclaimer
 
