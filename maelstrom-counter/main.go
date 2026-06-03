@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -46,7 +47,7 @@ func main() {
 	// TODO we would need to init the value on init to survive a crash
 	// keep a node specific in memory counter
 	var counter int
-	var mu sync.Mutex
+	var mu sync.RWMutex
 
 	n.Handle("add", func(msg maelstrom.Message) error {
 		var body struct {
@@ -58,29 +59,13 @@ func main() {
 
 		mu.Lock()
 		counter += body.Delta
-		// TODO errors
-		kv.Write(context.Background(), n.ID(), counter)
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		err := kv.Write(ctx, n.ID(), counter)
+		if err != nil {
+			return err
+		}
 		mu.Unlock()
-
-		// for {
-		// 	// read latest value
-		// 	i, err := kv.ReadInt(context.Background(), n.ID())
-		// 	if err != nil {
-		// 		if maelstrom.ErrorCode(err) == maelstrom.KeyDoesNotExist {
-		// 			i = 0
-		// 		} else {
-		// 			// TODO panic or what?
-		// 		}
-		// 	}
-		// 	err = kv.CompareAndSwap(context.Background(), n.ID(), i, i+body.Delta, true)
-		// 	if err != nil {
-		// 		if maelstrom.ErrorCode(err) == maelstrom.PreconditionFailed {
-		// 			// retry but if not precondition failed what to do?
-		// 		}
-		// 	} else {
-		// 		break
-		// 	}
-		// }
 
 		return n.Reply(msg, map[string]any{
 			"type": "add_ok",
@@ -100,16 +85,17 @@ func main() {
 	})
 
 	n.Handle("read", func(msg maelstrom.Message) error {
-		// TODO now I would reach out to every other node to get their own counter and then merge
-		// them here
-		mu.Lock()
+		mu.RLock()
 		sum := counter
-		mu.Unlock()
+		mu.RUnlock()
+
 		for _, k := range n.NodeIDs() {
 			if k == n.ID() {
 				continue
 			}
-			msg, err := n.SyncRPC(context.Background(), k, map[string]any{
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+			msg, err := n.SyncRPC(ctx, k, map[string]any{
 				"type": "read_internal",
 			})
 			if err != nil {
